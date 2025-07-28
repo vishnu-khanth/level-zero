@@ -326,7 +326,10 @@ def _mako_tracing_lib_cpp(path, namespace, tags, version, specs, meta):
 def _mako_null_driver_cpp(path, namespace, tags, version, specs, meta):
     dstpath = os.path.join(path, "null")
     os.makedirs(dstpath, exist_ok=True)
+    
+    loc = 0
 
+    # Generate nullddi.cpp
     template = "nullddi.cpp.mako"
     fin = os.path.join(templates_dir, template)
 
@@ -335,14 +338,51 @@ def _mako_null_driver_cpp(path, namespace, tags, version, specs, meta):
     fout = os.path.join(dstpath, filename)
 
     print("Generating %s..."%fout)
-    return util.makoWrite(
+    loc += util.makoWrite(
         fin, fout,
         name=name,
         ver=version,
         namespace=namespace,
         tags=tags,
         specs=specs,
-        meta=meta)
+        meta=meta,
+        n=namespace)
+    
+    # Generate enum assignments header for each namespace
+    template = "enum_assignments.h.mako"
+    fin = os.path.join(templates_dir, template)
+
+    filename = "%s_enum_assignments.h"%(namespace)
+    fout = os.path.join(dstpath, filename)
+
+    print("Generating %s..."%fout)
+    loc += util.makoWrite(
+        fin, fout,
+        ver=version,
+        namespace=namespace,
+        tags=tags,
+        specs=specs,
+        meta=meta,
+        n=namespace)
+    
+    # Generate enum assignments implementation for each namespace
+    template = "enum_assignments.cpp.mako"
+    fin = os.path.join(templates_dir, template)
+
+    filename = "%s_enum_assignments.cpp"%(namespace)
+    fout = os.path.join(dstpath, filename)
+
+    print("Generating %s..."%fout)
+    loc += util.makoWrite(
+        fin, fout,
+        ver=version,
+        namespace=namespace,
+        tags=tags,
+        specs=specs,
+        meta=meta,
+        n=namespace)
+    
+    return loc
 
 """
 Entry-point:
