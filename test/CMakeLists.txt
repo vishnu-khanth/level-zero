@@ -325,15 +325,79 @@ foreach(test_name IN ITEMS
   set_property(TEST ${test_name}_alt_drivers APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_NULL_DRIVER=1;${ALT_DRIVERS_ENV}")
 endforeach()
 
-add_test(NAME tests_sigle_driver_sysman_vf_management_api COMMAND tests --gtest_filter=*GivenLevelZeroLoaderPresentWhenCallingSysManVfApisThenExpectNullDriverIsReachedSuccessfully)
-set_property(TEST tests_sigle_driver_sysman_vf_management_api PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+# Add all ZES API module tests using foreach loop to avoid duplication
+set(ZES_MODULE_TESTS
+    sysman_vf_management_api
+    power_management_api
+    frequency_management_api
+    engine_utilization_api
+    standby_management_api
+    memory_management_api
+    fabric_port_management_api
+    temperature_monitoring_api
+    psu_management_api
+    fan_management_api
+    led_management_api
+    ras_management_api
+    diagnostics_management_api
+    scheduler_management_api
+    ecc_management_api
+    performance_factor_management_api
+    firmware_management_api
+    pci_management_api
+    event_management_api
+    overclocking_management_api
+    device_management_api
+    extended_power_management_api
+    extended_engine_management_api
+    extended_ras_management_api
+    extended_firmware_management_api
+    scheduler_debug_management_api
+)
 
-add_test(NAME tests_multi_driver_sysman_vf_management_api COMMAND tests --gtest_filter=*GivenLevelZeroLoaderPresentWithMultipleDriversWhenCallingZeInitThenZeInitDriversThenExpectSuccessForZeInitWithDriverGetAfterInitDrivers)
-if (MSVC)
-  set_property(TEST tests_multi_driver_sysman_vf_management_api APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
-else()
-  set_property(TEST tests_multi_driver_sysman_vf_management_api APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
-endif()
+set(ZES_TEST_FILTERS
+    "*GivenLevelZeroLoaderPresentWhenCallingSysManVfApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPowerManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFrequencyManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingEngineUtilizationApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingStandbyManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMemoryManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFabricPortManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingTemperatureMonitoringApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPsuManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFanManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingLedManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingRasManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingDiagnosticsManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingSchedulerManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingEccManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPerformanceFactorManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFirmwareManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPciManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingEventManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingOverclockingManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingDeviceManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingExtendedPowerManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingExtendedEngineManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingExtendedRasManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingExtendedFirmwareManagementApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingSchedulerDebugManagementApisThenExpectNullDriverIsReachedSuccessfully"
+)
+
+# Create single driver and multi driver tests for each ZES module
+foreach(test_name test_filter IN ZIP_LISTS ZES_MODULE_TESTS ZES_TEST_FILTERS)
+    # Single driver test
+    add_test(NAME tests_single_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    set_property(TEST tests_single_driver_${test_name} PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+    
+    # Multi driver test
+    add_test(NAME tests_multi_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    if (MSVC)
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
+    else()
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
+    endif()
+endforeach()
 
 # These tests are currently not supported on Windows. The reason is that the std::cerr is not being redirected to a pipe in Windows to be then checked against the expected output.
 if(NOT MSVC)
