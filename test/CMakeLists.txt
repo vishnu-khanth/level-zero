@@ -325,15 +325,79 @@ foreach(test_name IN ITEMS
   set_property(TEST ${test_name}_alt_drivers APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_NULL_DRIVER=1;${ALT_DRIVERS_ENV}")
 endforeach()
 
-add_test(NAME tests_sigle_driver_sysman_vf_management_api COMMAND tests --gtest_filter=*GivenLevelZeroLoaderPresentWhenCallingSysManVfApisThenExpectNullDriverIsReachedSuccessfully)
-set_property(TEST tests_sigle_driver_sysman_vf_management_api PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+# Add all ZET Tools API module tests using foreach loop to avoid duplication
+set(ZET_MODULE_TESTS
+    tools_module_debug_api
+    tools_debug_api
+    tools_metric_api
+    tools_pin_api
+    tools_tracing_api
+    tools_metric_programmable_api
+    tools_global_timestamps_api
+    tools_concurrent_metric_group_api
+    tools_metric_tracer_api
+    tools_metric_export_memory_api
+    tools_metric_group_marker_api
+    tools_metric_runtime_enable_disable_api
+    tools_multi_metric_values_api
+    tools_metric_export_data_api
+)
 
-add_test(NAME tests_multi_driver_sysman_vf_management_api COMMAND tests --gtest_filter=*GivenLevelZeroLoaderPresentWithMultipleDriversWhenCallingZeInitThenZeInitDriversThenExpectSuccessForZeInitWithDriverGetAfterInitDrivers)
-if (MSVC)
-  set_property(TEST tests_multi_driver_sysman_vf_management_api APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
-else()
-  set_property(TEST tests_multi_driver_sysman_vf_management_api APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
-endif()
+set(ZET_TEST_FILTERS
+    "*GivenLevelZeroLoaderPresentWhenCallingModuleDebugApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingDebugApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPinApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingTracingApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricProgrammableApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingGlobalTimestampApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingConcurrentMetricGroupApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricTracerApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricExportMemoryApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricGroupMarkerApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricRuntimeEnableDisableApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMultiMetricValuesApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMetricExportDataApisThenExpectNullDriverIsReachedSuccessfully"
+)
+
+# Create single driver and multi driver tests for each ZET Tools API module
+foreach(test_name test_filter IN ZIP_LISTS ZET_MODULE_TESTS ZET_TEST_FILTERS)
+    # Single driver test
+    add_test(NAME tests_single_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    set_property(TEST tests_single_driver_${test_name} PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+    
+    # Multi driver test
+    add_test(NAME tests_multi_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    if (MSVC)
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
+    else()
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
+    endif()
+endforeach()
+
+# Add all ZES API module tests using foreach loop to avoid duplication
+set(ZES_MODULE_TESTS
+    sysman_vf_management_api
+)
+
+set(ZES_TEST_FILTERS
+    "*GivenLevelZeroLoaderPresentWhenCallingSysManVfApisThenExpectNullDriverIsReachedSuccessfully"
+)
+
+# Create single driver and multi driver tests for each ZES module
+foreach(test_name test_filter IN ZIP_LISTS ZES_MODULE_TESTS ZES_TEST_FILTERS)
+    # Single driver test
+    add_test(NAME tests_single_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    set_property(TEST tests_single_driver_${test_name} PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+    
+    # Multi driver test
+    add_test(NAME tests_multi_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    if (MSVC)
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
+    else()
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
+    endif()
+endforeach()
 
 # These tests are currently not supported on Windows. The reason is that the std::cerr is not being redirected to a pipe in Windows to be then checked against the expected output.
 if(NOT MSVC)

@@ -11,6 +11,7 @@
 #include "loader/ze_loader.h"
 #include "ze_api.h"
 #include "zes_api.h"
+#include "zet_api.h"
 
 #include <fstream>
 
@@ -1660,6 +1661,733 @@ TEST(
       EXPECT_TRUE(compare_env("zesVFManagementGetVFEngineUtilizationExp2", std::to_string(i + 1)));
       EXPECT_EQ(ZE_RESULT_SUCCESS, zesVFManagementGetVFCapabilitiesExp2(vfHandle, &vf_exp2_capabilities));
       EXPECT_TRUE(compare_env("zesVFManagementGetVFCapabilitiesExp2", std::to_string(i + 1)));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingModuleDebugApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      ze_module_handle_t module;
+      ze_module_desc_t moduleDesc = {ZE_STRUCTURE_TYPE_MODULE_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeModuleCreate(context, devices[0], &moduleDesc, &module, nullptr));
+
+      size_t debugInfoSize = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetModuleGetDebugInfo(module, ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF, &debugInfoSize, nullptr));
+      EXPECT_TRUE(compare_env("zetModuleGetDebugInfo", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeModuleDestroy(module));
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingDebugApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      zet_device_debug_properties_t debugProperties = {ZET_STRUCTURE_TYPE_DEVICE_DEBUG_PROPERTIES};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDeviceGetDebugProperties(devices[0], &debugProperties));
+      EXPECT_TRUE(compare_env("zetDeviceGetDebugProperties", std::to_string(i + 1)));
+
+      zet_debug_config_t debugConfig = {};
+      debugConfig.pid = 1234;
+      zet_debug_session_handle_t debugSession;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugAttach(devices[0], &debugConfig, &debugSession));
+      EXPECT_TRUE(compare_env("zetDebugAttach", std::to_string(i + 1)));
+
+      uint64_t timeout = 1000;
+      zet_debug_event_t debugEvent = {};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugReadEvent(debugSession, timeout, &debugEvent));
+      EXPECT_TRUE(compare_env("zetDebugReadEvent", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugAcknowledgeEvent(debugSession, &debugEvent));
+      EXPECT_TRUE(compare_env("zetDebugAcknowledgeEvent", std::to_string(i + 1)));
+
+      ze_device_thread_t thread = {};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugInterrupt(debugSession, thread));
+      EXPECT_TRUE(compare_env("zetDebugInterrupt", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugResume(debugSession, thread));
+      EXPECT_TRUE(compare_env("zetDebugResume", std::to_string(i + 1)));
+
+      zet_debug_memory_space_desc_t memDesc = {ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC};
+      size_t size = 64;
+      void* buffer = nullptr;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugReadMemory(debugSession, thread, &memDesc, size, buffer));
+      EXPECT_TRUE(compare_env("zetDebugReadMemory", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugWriteMemory(debugSession, thread, &memDesc, size, buffer));
+      EXPECT_TRUE(compare_env("zetDebugWriteMemory", std::to_string(i + 1)));
+
+      uint32_t count = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugGetRegisterSetProperties(devices[0], &count, nullptr));
+      EXPECT_TRUE(compare_env("zetDebugGetRegisterSetProperties", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugGetThreadRegisterSetProperties(debugSession, thread, &count, nullptr));
+      EXPECT_TRUE(compare_env("zetDebugGetThreadRegisterSetProperties", std::to_string(i + 1)));
+
+      uint32_t type = 0;
+      uint32_t start = 0;
+      uint32_t regCount = 1;
+      void* registerValues = nullptr;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugReadRegisters(debugSession, thread, type, start, regCount, registerValues));
+      EXPECT_TRUE(compare_env("zetDebugReadRegisters", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugWriteRegisters(debugSession, thread, type, start, regCount, registerValues));
+      EXPECT_TRUE(compare_env("zetDebugWriteRegisters", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDebugDetach(debugSession));
+      EXPECT_TRUE(compare_env("zetDebugDetach", std::to_string(i + 1)));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+      EXPECT_TRUE(compare_env("zetMetricGroupGet", std::to_string(i + 1)));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        zet_metric_group_properties_t metricGroupProps = {ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES};
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGetProperties(metricGroups[0], &metricGroupProps));
+        EXPECT_TRUE(compare_env("zetMetricGroupGetProperties", std::to_string(i + 1)));
+
+        uint32_t metricCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGet(metricGroups[0], &metricCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricGet", std::to_string(i + 1)));
+
+        if (metricCount > 0) {
+          std::vector<zet_metric_handle_t> metrics(metricCount);
+          EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGet(metricGroups[0], &metricCount, metrics.data()));
+
+          zet_metric_properties_t metricProps = {ZET_STRUCTURE_TYPE_METRIC_PROPERTIES};
+          EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGetProperties(metrics[0], &metricProps));
+          EXPECT_TRUE(compare_env("zetMetricGetProperties", std::to_string(i + 1)));
+        }
+
+        uint32_t activateCount = 1;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetContextActivateMetricGroups(context, devices[0], activateCount, &metricGroups[0]));
+        EXPECT_TRUE(compare_env("zetContextActivateMetricGroups", std::to_string(i + 1)));
+
+        zet_metric_streamer_desc_t streamerDesc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC};
+        streamerDesc.samplingPeriod = 1000;
+        streamerDesc.notifyEveryNReports = 1;
+        zet_metric_streamer_handle_t streamer;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricStreamerOpen(context, devices[0], metricGroups[0], &streamerDesc, nullptr, &streamer));
+        EXPECT_TRUE(compare_env("zetMetricStreamerOpen", std::to_string(i + 1)));
+
+        ze_command_list_handle_t commandList;
+        ze_command_list_desc_t commandListDesc = {ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC};
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zeCommandListCreate(context, devices[0], &commandListDesc, &commandList));
+
+        uint32_t value = 0x12345678;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetCommandListAppendMetricStreamerMarker(commandList, streamer, value));
+        EXPECT_TRUE(compare_env("zetCommandListAppendMetricStreamerMarker", std::to_string(i + 1)));
+
+        size_t rawDataSize = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricStreamerReadData(streamer, UINT32_MAX, &rawDataSize, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricStreamerReadData", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricStreamerClose(streamer));
+        EXPECT_TRUE(compare_env("zetMetricStreamerClose", std::to_string(i + 1)));
+
+        zet_metric_query_pool_desc_t queryPoolDesc = {ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC};
+        queryPoolDesc.type = ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE;
+        queryPoolDesc.count = 1;
+        zet_metric_query_pool_handle_t queryPool;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryPoolCreate(context, devices[0], metricGroups[0], &queryPoolDesc, &queryPool));
+        EXPECT_TRUE(compare_env("zetMetricQueryPoolCreate", std::to_string(i + 1)));
+
+        uint32_t index = 0;
+        zet_metric_query_handle_t query;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryCreate(queryPool, index, &query));
+        EXPECT_TRUE(compare_env("zetMetricQueryCreate", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetCommandListAppendMetricQueryBegin(commandList, query));
+        EXPECT_TRUE(compare_env("zetCommandListAppendMetricQueryBegin", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetCommandListAppendMetricQueryEnd(commandList, query, nullptr, 0, nullptr));
+        EXPECT_TRUE(compare_env("zetCommandListAppendMetricQueryEnd", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetCommandListAppendMetricMemoryBarrier(commandList));
+        EXPECT_TRUE(compare_env("zetCommandListAppendMetricMemoryBarrier", std::to_string(i + 1)));
+
+        size_t queryDataSize = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryGetData(query, &queryDataSize, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricQueryGetData", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryReset(query));
+        EXPECT_TRUE(compare_env("zetMetricQueryReset", std::to_string(i + 1)));
+
+        uint32_t totalMetricValueCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupCalculateMetricValues(metricGroups[0], ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES, rawDataSize, nullptr, &totalMetricValueCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricGroupCalculateMetricValues", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryDestroy(query));
+        EXPECT_TRUE(compare_env("zetMetricQueryDestroy", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricQueryPoolDestroy(queryPool));
+        EXPECT_TRUE(compare_env("zetMetricQueryPoolDestroy", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zeCommandListDestroy(commandList));
+      }
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingPinApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      ze_module_handle_t module;
+      ze_module_desc_t moduleDesc = {ZE_STRUCTURE_TYPE_MODULE_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeModuleCreate(context, devices[0], &moduleDesc, &module, nullptr));
+
+      ze_kernel_handle_t kernel;
+      ze_kernel_desc_t kernelDesc = {ZE_STRUCTURE_TYPE_KERNEL_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeKernelCreate(module, &kernelDesc, &kernel));
+
+      zet_profile_properties_t profileProps = {ZET_STRUCTURE_TYPE_PROFILE_PROPERTIES};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetKernelGetProfileInfo(kernel, &profileProps));
+      EXPECT_TRUE(compare_env("zetKernelGetProfileInfo", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeKernelDestroy(kernel));
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeModuleDestroy(module));
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingTracingApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      void* userData = reinterpret_cast<void*>(0x12345);
+      zet_tracer_exp_desc_t tracerDesc = {ZET_STRUCTURE_TYPE_TRACER_EXP_DESC};
+      tracerDesc.pUserData = userData;
+      zet_tracer_exp_handle_t tracer;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetTracerExpCreate(context, &tracerDesc, &tracer));
+      EXPECT_TRUE(compare_env("zetTracerExpCreate", std::to_string(i + 1)));
+
+      zet_core_callbacks_t prologues = {};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetTracerExpSetPrologues(tracer, &prologues));
+      EXPECT_TRUE(compare_env("zetTracerExpSetPrologues", std::to_string(i + 1)));
+
+      zet_core_callbacks_t epilogues = {};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetTracerExpSetEpilogues(tracer, &epilogues));
+      EXPECT_TRUE(compare_env("zetTracerExpSetEpilogues", std::to_string(i + 1)));
+
+      ze_bool_t enable = true;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetTracerExpSetEnabled(tracer, enable));
+      EXPECT_TRUE(compare_env("zetTracerExpSetEnabled", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetTracerExpDestroy(tracer));
+      EXPECT_TRUE(compare_env("zetTracerExpDestroy", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricProgrammableApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        // For metric programmable APIs, we need to get a programmable handle first
+        uint32_t programmableCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricProgrammableGetExp(devices[0], &programmableCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricProgrammableGetExp", std::to_string(i + 1)));
+
+        if (programmableCount > 0) {
+          std::vector<zet_metric_programmable_exp_handle_t> programmables(programmableCount);
+          EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricProgrammableGetExp(devices[0], &programmableCount, programmables.data()));
+
+          uint32_t parameterCount = 0;
+          EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricProgrammableGetParamInfoExp(programmables[0], &parameterCount, nullptr));
+          EXPECT_TRUE(compare_env("zetMetricProgrammableGetParamInfoExp", std::to_string(i + 1)));
+
+          if (parameterCount > 0) {
+            uint32_t parameterIndex = 0;
+            uint32_t valueInfoCount = 0;
+            EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricProgrammableGetParamValueInfoExp(programmables[0], parameterIndex, &valueInfoCount, nullptr));
+            EXPECT_TRUE(compare_env("zetMetricProgrammableGetParamValueInfoExp", std::to_string(i + 1)));
+          }
+        }
+      }
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingGlobalTimestampApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      uint64_t hostTimestamp = 0;
+      uint64_t deviceTimestamp = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGetGlobalTimestamps(devices[0], &hostTimestamp, &deviceTimestamp));
+      EXPECT_TRUE(compare_env("zeDeviceGetGlobalTimestamps", std::to_string(i + 1)));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingConcurrentMetricGroupApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      uint32_t concurrentGroupCount = 0;
+      std::vector<zet_metric_group_handle_t> metricGroups(1);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDeviceGetConcurrentMetricGroupsExp(devices[0], 1, metricGroups.data(), nullptr, &concurrentGroupCount));
+      EXPECT_TRUE(compare_env("zetDeviceGetConcurrentMetricGroupsExp", std::to_string(i + 1)));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricTracerApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        uint32_t notificationInterval = 1000;
+        zet_metric_tracer_exp_desc_t tracerDesc = {ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC};
+        tracerDesc.notifyEveryNBytes = notificationInterval;
+        zet_metric_tracer_exp_handle_t metricTracer;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerCreateExp(context, devices[0], 1, &metricGroups[0], &tracerDesc, nullptr, &metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerCreateExp", std::to_string(i + 1)));
+
+        ze_bool_t synchronous = false;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerEnableExp(metricTracer, synchronous));
+        EXPECT_TRUE(compare_env("zetMetricTracerEnableExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDisableExp(metricTracer, synchronous));
+        EXPECT_TRUE(compare_env("zetMetricTracerDisableExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDestroyExp(metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerDestroyExp", std::to_string(i + 1)));
+      }
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricExportMemoryApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        uint32_t notificationInterval = 1000;
+        zet_metric_tracer_exp_desc_t tracerDesc = {ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC};
+        tracerDesc.notifyEveryNBytes = notificationInterval;
+        zet_metric_tracer_exp_handle_t metricTracer;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerCreateExp(context, devices[0], 1, &metricGroups[0], &tracerDesc, nullptr, &metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerCreateExp", std::to_string(i + 1)));
+
+        size_t rawDataSize = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerReadDataExp(metricTracer, &rawDataSize, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricTracerReadDataExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDestroyExp(metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerDestroyExp", std::to_string(i + 1)));
+      }
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricGroupMarkerApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      ze_command_list_handle_t commandList;
+      ze_command_list_desc_t commandListDesc = {ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeCommandListCreate(context, devices[0], &commandListDesc, &commandList));
+
+      zet_metric_group_handle_t metricGroupHandle = nullptr;
+      uint32_t markerValue = 0x1234;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetCommandListAppendMarkerExp(commandList, metricGroupHandle, markerValue));
+      EXPECT_TRUE(compare_env("zetCommandListAppendMarkerExp", std::to_string(i + 1)));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeCommandListDestroy(commandList));
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricRuntimeEnableDisableApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetDeviceEnableMetricsExp(devices[0]));
+      EXPECT_TRUE(compare_env("zetDeviceEnableMetricsExp", std::to_string(i + 1)));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMultiMetricValuesApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        uint32_t notificationInterval = 1000;
+        zet_metric_tracer_exp_desc_t tracerDesc = {ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC};
+        tracerDesc.notifyEveryNBytes = notificationInterval;
+        zet_metric_tracer_exp_handle_t metricTracer;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerCreateExp(context, devices[0], 1, &metricGroups[0], &tracerDesc, nullptr, &metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerCreateExp", std::to_string(i + 1)));
+
+        zet_metric_decoder_exp_handle_t decoder;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricDecoderCreateExp(metricTracer, &decoder));
+        EXPECT_TRUE(compare_env("zetMetricDecoderCreateExp", std::to_string(i + 1)));
+
+        uint32_t decodableMetricsCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricDecoderGetDecodableMetricsExp(decoder, &decodableMetricsCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricDecoderGetDecodableMetricsExp", std::to_string(i + 1)));
+
+        size_t rawDataSize = 0;
+        uint32_t setCount = 0;
+        uint32_t metricValueCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDecodeExp(decoder, &rawDataSize, nullptr, 0, nullptr, &setCount, nullptr, &metricValueCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricTracerDecodeExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricDecoderDestroyExp(decoder));
+        EXPECT_TRUE(compare_env("zetMetricDecoderDestroyExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDestroyExp(metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerDestroyExp", std::to_string(i + 1)));
+      }
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+  }
+
+  TEST(
+      ToolsApiLoaderDriverInteraction,
+      GivenLevelZeroLoaderPresentWhenCallingMetricExportDataApisThenExpectNullDriverIsReachedSuccessfully)
+  {
+    uint32_t pInitDriversCount = 0;
+    ze_init_driver_type_desc_t desc = {ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC};
+    desc.flags = UINT32_MAX;
+    desc.pNext = nullptr;
+    std::vector<ze_driver_handle_t> drivers;
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, nullptr, &desc));
+    drivers.resize(pInitDriversCount);
+    EXPECT_EQ(ZE_RESULT_SUCCESS, zeInitDrivers(&pInitDriversCount, drivers.data(), &desc));
+    EXPECT_GT(pInitDriversCount, 0);
+
+    for (std::size_t i = 0; i < drivers.size(); i++)
+    {
+      uint32_t deviceCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, nullptr));
+      std::vector<ze_device_handle_t> devices(deviceCount);
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeDeviceGet(drivers[i], &deviceCount, devices.data()));
+
+      ze_context_handle_t context;
+      ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC};
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(drivers[i], &contextDesc, &context));
+
+      uint32_t metricGroupCount = 0;
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, nullptr));
+
+      if (metricGroupCount > 0) {
+        std::vector<zet_metric_group_handle_t> metricGroups(metricGroupCount);
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricGroupGet(devices[0], &metricGroupCount, metricGroups.data()));
+
+        uint32_t notificationInterval = 1000;
+        zet_metric_tracer_exp_desc_t tracerDesc = {ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC};
+        tracerDesc.notifyEveryNBytes = notificationInterval;
+        zet_metric_tracer_exp_handle_t metricTracer;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerCreateExp(context, devices[0], 1, &metricGroups[0], &tracerDesc, nullptr, &metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerCreateExp", std::to_string(i + 1)));
+
+        zet_metric_decoder_exp_handle_t decoder;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricDecoderCreateExp(metricTracer, &decoder));
+        EXPECT_TRUE(compare_env("zetMetricDecoderCreateExp", std::to_string(i + 1)));
+
+        size_t rawDataSize = 0;
+        uint32_t setCount = 0;
+        uint32_t metricValueCount = 0;
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDecodeExp(decoder, &rawDataSize, nullptr, 0, nullptr, &setCount, nullptr, &metricValueCount, nullptr));
+        EXPECT_TRUE(compare_env("zetMetricTracerDecodeExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricDecoderDestroyExp(decoder));
+        EXPECT_TRUE(compare_env("zetMetricDecoderDestroyExp", std::to_string(i + 1)));
+
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zetMetricTracerDestroyExp(metricTracer));
+        EXPECT_TRUE(compare_env("zetMetricTracerDestroyExp", std::to_string(i + 1)));
+      }
+
+      EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
     }
   }
 } // namespace
