@@ -335,6 +335,62 @@ else()
   set_property(TEST tests_multi_driver_sysman_vf_management_api APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
 endif()
 
+# Add all ZE Core API module tests using foreach loop to avoid duplication
+set(ZE_CORE_MODULE_TESTS
+    core_driver_api
+    core_device_api
+    core_context_api
+    core_command_queue_api
+    core_command_list_api
+    core_memory_api
+    core_event_api
+    core_module_api
+    core_kernel_api
+    core_image_api
+    core_sampler_api
+    core_fence_api
+    core_physical_memory_api
+    core_virtual_memory_api
+    core_fabric_api
+    core_rtas_api
+    core_experimental_api
+)
+
+set(ZE_CORE_TEST_FILTERS
+    "*GivenLevelZeroLoaderPresentWhenCallingDriverApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingDeviceApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingContextApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingCommandQueueApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingCommandListApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingMemoryApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingEventApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingModuleApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingKernelApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingImageApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingSamplerApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFenceApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingPhysicalMemoryApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingVirtualMemoryApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingFabricApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingRTASApisThenExpectNullDriverIsReachedSuccessfully"
+    "*GivenLevelZeroLoaderPresentWhenCallingExperimentalApisThenExpectNullDriverIsReachedSuccessfully"
+)
+
+# Create single driver and multi driver tests for each ZE Core API module
+foreach(test_name test_filter IN ZIP_LISTS ZE_CORE_MODULE_TESTS ZE_CORE_TEST_FILTERS)
+    # Single driver test
+    add_test(NAME tests_single_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    set_property(TEST tests_single_driver_${test_name} PROPERTY ENVIRONMENT "ZE_ENABLE_NULL_DRIVER=1")
+    
+    # Multi driver test
+    add_test(NAME tests_multi_driver_${test_name} COMMAND tests --gtest_filter=${test_filter})
+    if (MSVC)
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test1.dll,${CMAKE_BINARY_DIR}/bin/$<CONFIG>/ze_null_test2.dll")
+    else()
+        set_property(TEST tests_multi_driver_${test_name} APPEND PROPERTY ENVIRONMENT "ZE_ENABLE_LOADER_DEBUG_TRACE=1;ZE_ENABLE_ALT_DRIVERS=${CMAKE_BINARY_DIR}/lib/libze_null_test1.so,${CMAKE_BINARY_DIR}/lib/libze_null_test2.so")
+    endif()
+endforeach()
+
 # These tests are currently not supported on Windows. The reason is that the std::cerr is not being redirected to a pipe in Windows to be then checked against the expected output.
 if(NOT MSVC)
     add_test(NAME tests_event_deadlock COMMAND tests --gtest_filter=*GivenLevelZeroLoaderPresentWhenCallingzeCommandListAppendMemoryCopyWithCircularDependencyOnEventsThenValidationLayerPrintsWarningOfDeadlock*)
