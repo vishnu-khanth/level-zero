@@ -973,6 +973,7 @@ Private:
     returns the list of parameters, filtering based on desc tags
 """
 def _filter_param_list(params, filters1=["[in]", "[in,out]", "[out]"], filters2=[""]):
+    params = params or []
     lst = []
     for p in params:
         for f1 in filters1:
@@ -1001,7 +1002,7 @@ def _get_param_name(namespace, tags, item, cpp):
 
 def get_func_descs(namespace, tags, obj):
     descs = []
-    for item in obj['params']:
+    for item in obj['params'] or []:
         if (    type_traits.is_descriptor(item['type']) or
                 type_traits.is_properties(item['type']) or
                 type_traits.is_counters(item['type']) or
@@ -1041,6 +1042,7 @@ def make_param_lines(namespace, tags, obj, cpp=False, py=False, decl=False, meta
     else:
         params = obj['params']
 
+    params = params or []
     for i, item in enumerate(params):
         name = _get_param_name(namespace, tags, item, cpp=cpp)
         if py:
@@ -1919,7 +1921,7 @@ Public:
 def get_loader_epilogue(namespace, tags, obj, meta):
     epilogue = []
 
-    for i, item in enumerate(obj['params']):
+    for i, item in enumerate(obj['params'] or []):
         if param_traits.is_mbz(item):
             continue
         if param_traits.is_release(item) or param_traits.is_output(item) or param_traits.is_inoutput(item):
