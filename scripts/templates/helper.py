@@ -1704,6 +1704,20 @@ def get_class_function_objs(specs, cname, minVersion = 0, maxVersion = 9999):
                     objects.append(obj)
     return sorted(objects, key=lambda obj: (float(obj.get('version',"1.0"))*10000) + int(obj.get('ordinal',"100")))
 
+
+"""
+Public:
+    Extracts the failure return value from a function spec object.
+    Returns the last key in the 'returns' list.
+"""
+def get_failure_return(obj):
+    returns = obj.get('returns', [])
+    if returns:
+        last_ret = returns[-1]
+        if last_ret:
+            return list(last_ret.keys())[-1]
+    return None
+
 """
 Public:
     returns a list of all non-experimental function objs and a list of experimental function objs for the specified class
